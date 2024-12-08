@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario de Guardias</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .calendar-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .month-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 10px;
+        }
+        .day {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: center;
+            border-radius: 5px;
+            color: #000;
+        }
+        .day header {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .guardias {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #FFFFFF;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input, select, button {
+            margin-bottom: 10px;
+        }
+        .admin {
+            display: none;
+        }
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            text-align: left;
+            border-radius: 10px;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover, .close:focus {
+            color: black;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Calendario de Guardias</h1>
+
+    <!-- Formulario solo visible para el administrador -->
+    <form id="guardiaForm" class="admin">
+        <label for="date">Fecha:</label>
+        <input type="date" id="date" name="date" required>
+
+        <label for="team">Equipo:</label>
+        <select id="team" name="team" required>
+            <option value="">Selecciona un equipo</option>
+        </select>
+
+        <button type="submit">Asignar Guardia</button>
+    </form>
+
+    <!-- Botón para editar equipos (solo administrador) -->
+    <button id="editTeamsButton" class="admin">Editar Equipos</button>
+
+    <!-- Modal para editar equipos -->
+    <div id="editTeamsModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Editar Equipos</h2>
+            <form id="editTeamsForm">
+                <div id="teamsContainer">
+                    <!-- Aquí se generan dinámicamente los campos para editar equipos -->
+                </div>
+                <button type="submit">Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Contenedor del calendario -->
+    <div class="calendar-container">
+        <div class="month-title" id="monthTitle">
+            <!-- El título del mes se genera dinámicamente aquí -->
+        </div>
+        <div class="calendar" id="calendar">
+            <!-- El calendario se genera dinámicamente aquí -->
+        </div>
+    </div>
+
+    <script>
+        const calendar = document.getElementById('calendar');
+        const monthTitle = document.getElementById('monthTitle');
+        const guardiaForm = document.getElementById('guardiaForm');
+        const teamSelect = document.getElementById('team');
+        const guardias = JSON.parse(localStorage.getItem('guardias')) || {};
+        const adminPassword = "admin123"; // Contraseña del administrador
+
+        const equipos = JSON.parse(localStorage.getItem('equipos')) || [
+            { name: 'Equipo 1', members: 'Kamenov, Dani, Ángel', color: 'yellow' },
+            { name: 'Equipo 2', members: 'Martínez, Manolo, Carlos', color: 'blue' },
+            { name: 'Equipo 3', members: 'Manu, Vergada, Mallouli', color: 'green' },
+            { name: 'Equipo 4', members: 'Diana, Ripoll, Teixido', color: 'black' },
+            { name: 'Equipo 5', members: 'Aitor, Aranega, Victor', color: 'orange' },
+            { name: 'Equipo 6', members: 'Sisco, Florin, Garriga', color: 'pink' }
+        ];
+
+        const meses = [
+            'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+        ];
+
+        // Verificar administrador
+        function checkAdmin() {
+            const password = prompt("Introduce la contraseña de administrador:");
+            if (password === adminPassword) {
+                document.querySelectorAll('.admin').forEach(el => el.style.display = 'block');
+                alert("Bienvenido, administrador.");
+            } else {
+                alert("No tienes permisos para hacer cambios.");
+            }
+        }
+
+        // Cargar equipos en el select
+        function populateTeamSelect() {
+            teamSelect.innerHTML = '<option value="">Selecciona un equipo</option>';
+            equipos.forEach((equipo, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `${equipo.name} (${equipo.members})`;
+                teamSelect.appendChild(option);
+            });
+        }
+
+        // Generar calendario
+        function generateCalendar() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            monthTitle.textContent = `${meses[month]} ${year}`;
+
+            calendar.innerHTML = '';
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+
+            let startDay = firstDay.getDay();
+            startDay = (startDay === 0) ? 6 : startDay - 1;
+
+            for (let i = 0; i < startDay; i++) {
+                const emptyCell = document.createElement('div');
+                emptyCell.className = 'day';
+                calendar.appendChild(emptyCell);
+            }
+
+            for (let day = 1; day <= lastDay.getDate(); day++) {
+                const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'day';
+                const header = document.createElement('header');
+                header.textContent = day;
+                dayDiv.appendChild(header);
+                if (guardias[dateKey]) {
+                    const { teamIndex } = guardias[dateKey];
+                    const equipo = equipos[teamIndex];
+                    const guardiasDiv = document.createElement('div');
+                    guardiasDiv.className = 'guardias';
+                    guardiasDiv.textContent = equipo.members;
+                    dayDiv.style.backgroundColor = equipo.color;
+                    dayDiv.style.color = equipo.color === 'yellow' ? '#000' : '#fff';
+                    dayDiv.appendChild(guardiasDiv);
+                }
+                calendar.appendChild(dayDiv);
+            }
+        }
+
+        // Editar equipos
+        function openEditTeamsModal() {
+            const modal = document.getElementById('editTeamsModal');
+            const teamsContainer = document.getElementById('teamsContainer');
+            teamsContainer.innerHTML = '';
+            equipos.forEach((equipo, index) => {
+                const teamDiv = document.createElement('div');
+                teamDiv.innerHTML = `
+                    <label>Nombre del Equipo ${index + 1}:</label>
+                    <input type="text" value="${equipo.name}" data-index="${index}" class="team-name">
+                    <label>Integrantes:</label>
+                    <input type="text" value="${equipo.members}" data-index="${index}" class="team-members">
+                    <label>Color:</label>
+                    <input type="color" value="${equipo.color}" data-index="${index}" class="team-color">
+                `;
+                teamsContainer.appendChild(teamDiv);
+            });
+            modal.style.display = 'block';
+        }
+
+        function saveTeams() {
+            const names = document.querySelectorAll('.team-name');
+            const members = document.querySelectorAll('.team-members');
+            const colors = document.querySelectorAll('.team-color');
+            names.forEach((input, index) => {
+                equipos[index].name = input.value;
+            });
+            members.forEach((input, index) => {
+                equipos[index].members = input.value;
+            });
+            colors.forEach((input, index) => {
+                equipos[index].color = input.value;
+            });
+            localStorage.setItem('equipos', JSON.stringify(equipos));
+            populateTeamSelect();
+            generateCalendar();
+        }
+
+        document.getElementById('editTeamsButton').addEventListener('click', openEditTeamsModal);
+
+        document.querySelector('.close').addEventListener('click', () => {
+            document.getElementById('editTeamsModal').style.display = 'none';
+        });
+
+        document.getElementById('editTeamsForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            saveTeams();
+            document.getElementById('editTeamsModal').style.display = 'none';
+        });
+
+        checkAdmin();
+        populateTeamSelect();
+        generateCalendar();
+    </script>
+</body>
+</html>
+
